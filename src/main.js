@@ -30,11 +30,16 @@ app.use('/ui', express.static('./src/www'));
 app.set('views', './src/views');
 app.set('view engine', 'pug');
 
+function renderPage(settings, req, res) {
+	settings.baseURL = '/' + req.hostname + '/ui/';
+	console.log(settings.baseURL);
+	res.render('index', settings);
+}
+
 app.get('/ui', function (req, res) {
 	getSettings()
 		.then((settings) => {
-			console.log("[/ui render]");
-			res.render('index', settings);
+			renderPage(settings, req, res);
 		})
 		.catch((error) => {
 			console.log("[/ui] Error ", error);
@@ -45,10 +50,11 @@ let consumer;
 app.post('/ui/login', (req, res) => {
 	getSettings()
 		.then((settings) => {
-			let urlRoot = req.body.callback;
-			if (urlRoot == null) {
-				urlRoot = "https://localhost/driver-twitter/ui/oauth"
+			let callback = req.body.callback;
+			if (callback == null) {
+				callback = "https://localhost/driver-twitter/ui/oauth"
 			}
+
 			if (req.body.consumer_key) {
 				settings.consumer_key = req.body.consumer_key;
 			}
@@ -58,18 +64,20 @@ app.post('/ui/login', (req, res) => {
 
 			consumer = new oauth.OAuth(
 				"https://api.twitter.com/oauth/request_token", "https://api.twitter.com/oauth/access_token",
-				settings.consumer_key, settings.consumer_secret, "1.0A", urlRoot, "HMAC-SHA1");
-			consumer.getOAuthRequestToken(function (error, oauthToken, oauthTokenSecret, results) {
+				settings.consumer_key, settings.consumer_secret, "1.0A", callback, "HMAC-SHA1");
+			consumer.getOAuthRequestToken((error, oauthToken, oauthTokenSecret, results) => {
 				if (error) {
 					res.send("Error getting OAuth request token : " + JSON.stringify(error), 500);
 				} else {
 					console.log(results);
 					settings.requestToken = oauthToken;
 					settings.requestTokenSecret = oauthTokenSecret;
-					settings.redirect = urlRoot;
 					console.log(settings);
 					setSettings(settings)
-						.then(() => {
+						.catch((err) => {
+							console.log(err);
+						})
+						.finally(() => {
 							res.render('oauth_redirect', {url: 'https://api.twitter.com/oauth/authenticate?oauth_token=' + settings.requestToken});
 						})
 				}
@@ -88,14 +96,11 @@ app.get('/ui/oauth', (req, res) => {
 					settings.access_token = oauthAccessToken;
 					settings.access_token_secret = oauthAccessTokenSecret;
 					setSettings(settings)
-						.then(() => {
-							let redirectURL = settings.redirect;
-							redirectURL = redirectURL.replace('/driver-twitter/ui/oauth', '/core-ui/ui/view?ui=driver-twitter')
-							twitter.connect(settings)
-								.then( (T)=> {
-									monitorTwitterEvents(T, settings);
-								})
-							res.render('redirect', {url: redirectURL});
+						.catch((err) => {
+							console.log(err);
+						})
+						.finally(() => {
+							renderPage(settings, req, res);
 						});
 				}
 			});
@@ -109,15 +114,17 @@ app.post('/ui/logout', (req, res) => {
 			settings.access_token_secret = null;
 			stopAllStreams();
 			setSettings(settings)
-				.then(() => {
-					let redirectURL = '/driver-twitter/ui';
-					res.render('redirect', {url: redirectURL});
+				.catch((err) => {
+					console.log(err);
+				})
+				.finally(() => {
+					renderPage(settings, req, res);
 				});
 		});
 });
 
 
-app.get('/ui/setHashTags', function (req, res) {
+app.post('/ui/setHashTags', function (req, res) {
 	let newHashTags = req.query.hashTags;
 	console.log(newHashTags);
 	getSettings()
@@ -134,7 +141,7 @@ app.get('/ui/setHashTags', function (req, res) {
 			let settings = data[1];
 			stopAllStreams();
 			monitorTwitterEvents(T, settings);
-			res.render('index', settings);
+			renderPage(settings, req, res);
 		})
 		.catch((error) => {
 			console.log("[setHashTags] Error ", error);
@@ -214,54 +221,58 @@ driverSettings.StoreType = 'kv';
 
 tsc.RegisterDatasource(timeLine)
 	.then(() => {
+		console.log("Regiestered timeline");
 		return tsc.RegisterDatasource(hashTag);
 	})
 	.then(() => {
+		console.log("Regiestered hashtag");
 		return tsc.RegisterDatasource(userDM);
 	})
 	.then(() => {
+		console.log("Regiestered userDM");
 		return tsc.RegisterDatasource(userRetweet);
 	})
 	.then(() => {
+		console.log("Regiestered userRetweet");
 		return tsc.RegisterDatasource(userFav);
 	})
 	.then(() => {
+		console.log("Regiestered userFav");
 		return tsc.RegisterDatasource(testActuator);
 	})
 	.then(() => {
+		console.log("Regiestered testActuator");
 		return kvc.RegisterDatasource(driverSettings);
 	})
 	.catch((err) => {
 		console.log("Error registering data source:" + err);
 	})
 	.then(() => {
-		let inlineSettings = DefaultTwitConfig;
-		inlineSettings.hashTags = HASH_TAGS_TO_TRACK;
+		DefaultTwitConfig.hashTags = HASH_TAGS_TO_TRACK;
 
 		getSettings()
-		.then((settings) => {
-			console.log("Twitter Auth");
-			if (settings.hasOwnProperty('consumer_key')) {
-				return Promise.all([twitter.connect(settings), Promise.resolve(settings)]);
-			} else {
-				return Promise.all([Promise.resolve(null), Promise.resolve(settings)]);
-			}
-		})
-		.then((data) => {
-			console.log("Connected to twitter!");
+			.then((settings) => {
+				console.log("Twitter Auth");
+				if (settings.hasOwnProperty('consumer_key')) {
+					return Promise.all([twitter.connect(settings), Promise.resolve(settings)]);
+				} else {
+					return Promise.all([Promise.resolve(null), Promise.resolve(settings)]);
+				}
+			})
+			.then((data) => {
+				console.log("Connected to twitter!");
 
-			let T = data[0];
-			let settings = data[1];
+				let T = data[0];
+				let settings = data[1];
 
-			if (T != null) {
-				monitorTwitterEvents(T, settings);
-			}
-
-		})
+				if (T != null) {
+					monitorTwitterEvents(T, settings);
+				}
+			})
 	})
 	.catch((err) => {
 		console.log("[ERROR]", err);
-		let settings = {}
+		let settings = {};
 		settings.access_token = null;
 		settings.access_token_secret = null;
 		setSettings(settings);
@@ -310,8 +321,8 @@ function stopAllStreams() {
 }
 
 function getSettings() {
-	datasourceid = 'twitterSettings';
-	return new Promise((resolve, reject) => {
+	const datasourceid = 'twitterSettings';
+	return new Promise((resolve) => {
 		kvc.Read(datasourceid, "settings")
 			.then((settings) => {
 				console.log("[getSettings] read response = ", settings);
@@ -326,7 +337,7 @@ function getSettings() {
 				console.log("[getSettings]", settings);
 				resolve(settings);
 			})
-			.catch((err) => {
+			.catch(() => {
 				let settings = DefaultTwitConfig;
 				settings.hashTags = HASH_TAGS_TO_TRACK;
 				console.log("[getSettings] using defaults Using ----> ", settings);
@@ -352,7 +363,6 @@ function setSettings(settings) {
 
 function save(datasourceid, data) {
 	console.log("Saving tweet::", data.text);
-	json = {"data": data};
 	tsc.Write(datasourceid, data)
 		.then((resp) => {
 			console.log("Save got response ", resp);

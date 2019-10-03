@@ -2,7 +2,7 @@ doctype html
 html(lang='en')
 	head
 		title Databox Twitter Driver
-		base(href='/driver-twitter/ui/')
+		base(href=baseURL)
 		link(rel='stylesheet', href='material-components-web.min.css')
 		script(src='material-components-web.min.js', defer=true)
 		script(src='bundle.js', defer=true)
@@ -40,7 +40,7 @@ html(lang='en')
 						button.mdc-button#twitter_logout
 							| Logout
 
-		div.mdc-card(style="margin-top: 16px")
+		form.mdc-card(method="post", action="setHashTags", style="margin-top: 16px")
 			div(style="padding: 0 16px")
 				h2.mdc-typography--headline6 HashTags
 
@@ -55,4 +55,4 @@ html(lang='en')
 
 			div.mdc-card__actions(style="flex-direction: row-reverse")
 				div.mdc-card__action-buttons
-					button.mdc-button#save_hashtags(type='button' value='save') Save
+					button.mdc-button(type='button' value='save') Save
