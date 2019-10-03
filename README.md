@@ -62,7 +62,6 @@ redirect the browser.
 
 In the twitter driver, the authentication process is triggered from a post request. An otherwise empty web page is
 returned from the request with the above code in a script tag to redirect once the post request finishes. 
-See [oauth_redirect.pug](src/views.oauth_redirect.pug)
 
 ## Databox is funded by the following grants:
 
